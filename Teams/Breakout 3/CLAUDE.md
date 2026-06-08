@@ -53,5 +53,6 @@ python budget.py report --month 2026-06
 **Custom slash commands** (in `.claude/commands/`)
 - `/commit [title]` — stage relevant changes, run the `ensure-tests` skill first, write a concise commit summary, commit the changes, and show the resulting commit
 - `/add-expense <amount> <category> [note]` — parse args and record an expense
+- `/add-income <amount> <source> [note]` — parse args and record income
 - `/monthly-report [YYYY-MM]` — run the report and add a one-line observation
 - `/categorize <amount> <description>` — Claude picks a category, confirms, then records
