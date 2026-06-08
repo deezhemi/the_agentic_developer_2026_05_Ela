@@ -1,0 +1,1965 @@
+agents
+Let me check the current state of the agents in this project.
+
+Globpattern: "**/.claude/agents/**"
+Found 6 files
+Read C:\Users\cdhar\Documents\Source\the_agentic_developer_2026_05_Ela\Teams\Breakout 3\.claude\agents
+Read C:\Users\cdhar\Documents\Source\the_agentic_developer_2026_05_Ela\Teams\Breakout 3\.claude\agents\feature-orchestrator.md
+Read C:\Users\cdhar\Documents\Source\the_agentic_developer_2026_05_Ela\Teams\Breakout 3\.claude\agents\feature-implementer.md
+Read C:\Users\cdhar\Documents\Source\the_agentic_developer_2026_05_Ela\Teams\Breakout 3\.claude\agents\python-unit-test-writer.md
+Read C:\Users\cdhar\Documents\Source\the_agentic_developer_2026_05_Ela\Teams\Breakout 3\.claude\agents\budget-manual-writer.md
+Here's a summary of the 4 agents in Teams/Breakout 3/.claude/agents/:
+
+Agent Pipeline (Breakout 3)
+These 4 agents work together as a coordinated feature delivery pipeline for the Python budgeting CLI app:
+
+Agent	Role
+feature-orchestrator	Top-level coordinator — runs Phase 1 (implementation) sequentially, then Phase 2 (tests + docs) in parallel
+feature-implementer	Reads feature specs and writes the actual Python code (db.py / budget.py)
+python-unit-test-writer	Writes/updates pytest tests for staged Python files; also triggers before commits
+budget-manual-writer	Creates/updates USER_MANUAL.md from the actual source code
+Typical flow: feature-orchestrator → feature-implementer (Phase 1) → python-unit-test-writer + budget-manual-writer in parallel (Phase 2).
+
+Each agent also has persistent project-scoped memory in .claude/agent-memory/ to build institutional knowledge across sessions.
+
+What would you like to do with them?
+
+start the feature-orchestrator agent
+Agent:Feature orchestrator agent
+IN
+The user wants to start a new feature delivery pipeline. You are the feature-orchestrator agent for the personal budgeting CLI app in `Teams/Breakout 3/`. 
+
+Greet the user and ask them what feature they'd like to build. Follow your orchestration workflow: clarify requirements first, then invoke feature-implementer, then parallelize python-unit-test-writer and budget-manual-writer once implementation is confirmed.
+
+The project is a Python 3 + SQLite CLI app (Windows/PowerShell). Architecture: `db.py` (all SQL), `budget.py` (CLI/argparse). No third-party dependencies allowed.
+The feature-orchestrator is a Claude Code project agent — it can't be launched through my Agent tool, which only knows about built-in types.
+
+To invoke it, type @feature-orchestrator at the start of your next message in the Claude Code chat. For example:
+
+
+@feature-orchestrator I want to add a [feature description]
+That will load the agent's system prompt from Teams/Breakout 3/.claude/agents/feature-orchestrator.md and run it directly.
+
+@feature-orchestrator I want to add a web based ui to the budget app that has a dashboard to show the monthly report in a pie chart. It should also have a button to input a new income or expense item
+I'll act as the feature-orchestrator for this request.
+
+Phase 0 — Clarifying Requirements
+Before I brief the feature-implementer, I have a few critical questions. This feature represents a significant architectural expansion, and I want to make sure we get the scope right.
+
+Let me first check the current state of the project.
+
+Globpattern: "Teams/Breakout 3/**/*.py"
+Found 7 files
+Globpattern: "Teams/Breakout 3/**/*.md"
+Found 12 files
+Read C:\Users\cdhar\Documents\Source\the_agentic_developer_2026_05_Ela\Teams\Breakout 3\db.py
+Read C:\Users\cdhar\Documents\Source\the_agentic_developer_2026_05_Ela\Teams\Breakout 3\budget.py
+Read C:\Users\cdhar\Documents\Source\the_agentic_developer_2026_05_Ela\Teams\Breakout 3\expenses.py
+Read C:\Users\cdhar\Documents\Source\the_agentic_developer_2026_05_Ela\Teams\Breakout 3\chart.py
+Good — I've reviewed the codebase. Here's what exists so far:
+
+db.py — SQLite schema (expenses + income tables)
+expenses.py — CATEGORIES list + expense queries
+income.py — income queries
+chart.py — ASCII bar chart (CLI only)
+budget.py — argparse CLI
+Before I brief the feature-implementer, I need to resolve one critical constraint and a couple of scope questions:
+
+AskUserQuestion
+OUT
+Your questions have been answered: "The project currently allows no third-party dependencies. A web UI almost certainly needs one. Which approach should we take?"="Flask (Recommended)", "For the pie chart in the browser, which rendering approach do you prefer?"="Chart.js via CDN (Recommended)", "Should the web UI live alongside the existing CLI (new server.py + templates/ folder), or replace it?"="Alongside CLI (Recommended)". You can now continue with these answers in mind.
+All three questions answered. Here's the plan:
+
+Flask for the server (one new dependency, explicitly approved)
+Chart.js via CDN for the pie chart (no extra install)
+Alongside the CLI — new server.py + templates/, sharing db.py
+Phase 1 — Invoking feature-implementer
+Briefing the implementer now.
+
+Agent:Implement web UI feature
+IN
+You are the **feature-implementer** agent for a Python 3 + SQLite personal budgeting CLI app. You are a senior software engineer specializing in translating feature specs into clean, working code. This is a teaching environment — explain your key decisions as you go.
+
+## Project location
+All work must stay inside: `C:\Users\cdhar\Documents\Source\the_agentic_developer_2026_05_Ela\Teams\Breakout 3\`
+
+## Existing architecture
+- `db.py` — SQLite schema (expenses + income tables), `get_conn()`, `init_db()`
+- `expenses.py` — `CATEGORIES` list, `add_expense()`, `list_expenses()`, `monthly_totals()`
+- `income.py` — `add_income()`, `monthly_income_total()`
+- `chart.py` — ASCII chart (CLI only, leave untouched)
+- `budget.py` — argparse CLI entry point (leave untouched)
+- `test_budget.py`, `test_chart.py` — existing tests (do not break)
+
+**Architectural rules:**
+- All SQL stays in `db.py`
+- All CLI/argparse logic stays in `budget.py`
+- No SQL in `server.py`
+- Platform: Windows / PowerShell
+
+## Feature to implement: Web UI Dashboard
+
+**User story:** A user can run `python server.py` and open `http://localhost:5000` in a browser to see a dashboard with the current month's spending as a pie chart, and use a form to add a new expense or income entry.
+
+**Acceptance criteria:**
+1. `server.py` — Flask app with these routes:
+   - `GET /` — serves the dashboard HTML page
+   - `GET /api/report?month=YYYY-MM` — returns JSON: `{ "month": "...", "income": float, "totals": [{"category": str, "total": float}, ...] }`
+   - `POST /api/expense` — JSON body `{ "amount": float, "category": str, "note": str }` — calls `expenses.add_expense()`; returns `{"ok": true}`
+   - `POST /api/income` — JSON body `{ "amount": float, "source": str, "note": str }` — calls `income.add_income()`; returns `{"ok": true}`
+
+2. `templates/index.html` — single-page dashboard:
+   - Month selector (defaults to current month, format YYYY-MM)
+   - Pie chart rendered with **Chart.js loaded from CDN** (not installed locally) showing expense categories for the selected month
+   - Income total displayed separately (not in the pie chart)
+   - A button labeled "Add Entry" that opens a simple inline form (no modal library needed) to add either an expense or income item. Form fields: type (expense/income), amount, category (dropdown for expenses, text for income), note. On submit, POST to the appropriate API endpoint and refresh the chart.
+   - Clean, readable styling using plain CSS (no framework). Should look professional but minimal.
+
+3. `requirements.txt` — create this file with just `flask` in it (check if it already exists first).
+
+4. `db.py` — add `init_db()` call at import time (currently it's only called from `budget.py`'s `main()`). Or alternatively, call `db.init_db()` at the top of `server.py` before the Flask routes. The DB must be initialized before any request is handled.
+
+**Constraints:**
+- Flask is the only new dependency (explicitly approved by the user)
+- Chart.js is loaded from CDN in the HTML — no npm, no pip install for it
+- No other third-party libraries
+- Keep all templates in `templates/` subfolder (Flask default)
+- Use `flask.request.get_json()` for POST bodies
+- Validate that `category` is in `expenses.CATEGORIES` before inserting; return 400 with error message if invalid
+
+**What to deliver:**
+1. Brief explanation of your approach
+2. Implementation plan (numbered steps)
+3. The actual code changes (create `requirements.txt`, `server.py`, `templates/index.html`)
+4. PowerShell commands the user can run to test it:
+   ```powershell
+   cd "Teams\Breakout 3"
+   pip install flask
+   python server.py
+   # Then open http://localhost:5000
+   ```
+5. Summary of what was created and any caveats
+Bash List files in Breakout 3 directory
+IN
+ls "C:\Users\cdhar\Documents\Source\the_agentic_developer_2026_05_Ela\Teams\Breakout 3\"
+
+OUT
+Exit code 1
+/usr/bin/bash: eval: line 0: unexpected EOF while looking for matching `"'
+/usr/bin/bash: eval: line 1: syntax error: unexpected end of file
+Bash List files in Breakout 3 directory
+IN
+ls "C:/Users/cdhar/Documents/Source/the_agentic_developer_2026_05_Ela/Teams/Breakout 3/"
+
+OUT
+CLAUDE.md
+__pycache__
+budget.db
+budget.py
+chart.py
+db.py
+expenses.py
+income.py
+test_budget.py
+test_chart.py
+Read income.py
+Read test_budget.py
+Read CLAUDE.md
+Write requirements.txt
+2 lines
+flask
+Write server.py
+143 lines
+"""
+server.py — Flask web UI for the personal budget tracker.
+
+Architecture note: this file is intentionally thin.
+- All SQL lives in db.py
+- All business logic lives in expenses.py / income.py
+- This file only handles HTTP: routing, JSON serialization, and error responses.
+"""
+
+from datetime import date
+
+from flask import Flask, jsonify, render_template, request
+
+import db
+import expenses
+import income
+
+# Initialize the database schema before any request can arrive.
+# This is the web-server equivalent of the `db.init_db()` call in budget.py's main().
+db.init_db()
+
+app = Flask(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Pages
+# ---------------------------------------------------------------------------
+
+@app.route("/")
+def index():
+    """Serve the single-page dashboard."""
+    return render_template("index.html")
+
+
+# ---------------------------------------------------------------------------
+# API — read
+# ---------------------------------------------------------------------------
+
+@app.route("/api/report")
+def api_report():
+    """
+    GET /api/report?month=YYYY-MM
+
+    Returns JSON:
+      { "month": "YYYY-MM", "income": float, "totals": [{"category": str, "total": float}, ...] }
+
+    Defaults to the current month if ?month is omitted.
+    """
+    month = request.args.get("month") or date.today().strftime("%Y-%m")
+
+    # monthly_totals() returns sqlite3.Row objects.
+    # sqlite3.Row is dict-like but not JSON-serializable, so we convert explicitly.
+    totals = [
+        {"category": row["category"], "total": row["total"]}
+        for row in expenses.monthly_totals(month)
+    ]
+
+    income_total = income.monthly_income_total(month)
+
+    return jsonify({
+        "month": month,
+        "income": income_total,
+        "totals": totals,
+    })
+
+
+# ---------------------------------------------------------------------------
+# API — write
+# ---------------------------------------------------------------------------
+
+@app.route("/api/expense", methods=["POST"])
+def api_add_expense():
+    """
+    POST /api/expense
+    Body: { "amount": float, "category": str, "note": str }
+
+    Validates that category is in expenses.CATEGORIES (add_expense raises ValueError if not).
+    Returns: {"ok": true} or HTTP 400 with {"error": "..."}.
+    """
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be JSON"}), 400
+
+    amount = data.get("amount")
+    category = data.get("category", "")
+    note = data.get("note", "")
+
+    if amount is None:
+        return jsonify({"error": "amount is required"}), 400
+
+    try:
+        amount = float(amount)
+    except (TypeError, ValueError):
+        return jsonify({"error": "amount must be a number"}), 400
+
+    # Validate category upfront for a clearer error message.
+    # (add_expense also validates, but catching ValueError here lets us return 400.)
+    if category not in expenses.CATEGORIES:
+        return jsonify({
+            "error": f"Invalid category '{category}'. Valid options: {', '.join(expenses.CATEGORIES)}"
+        }), 400
+
+    expenses.add_expense(amount, category, note)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/income", methods=["POST"])
+def api_add_income():
+    """
+    POST /api/income
+    Body: { "amount": float, "source": str, "note": str }
+
+    Returns: {"ok": true} or HTTP 400 with {"error": "..."}.
+    """
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body must be JSON"}), 400
+
+    amount = data.get("amount")
+    source = data.get("source", "")
+    note = data.get("note", "")
+
+    if amount is None:
+        return jsonify({"error": "amount is required"}), 400
+
+    try:
+        amount = float(amount)
+    except (TypeError, ValueError):
+        return jsonify({"error": "amount must be a number"}), 400
+
+    income.add_income(amount, source, note)
+    return jsonify({"ok": True})
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    # debug=True gives auto-reload on file changes — handy during development.
+    # Never use debug=True in production.
+    app.run(debug=True, port=5000)
+Bash Create templates directory
+IN
+mkdir -p "C:/Users/cdhar/Documents/Source/the_agentic_developer_2026_05_Ela/Teams/Breakout 3/templates"
+
+OUT
+(Bash completed with no output)
+Write index.html
+508 lines
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Budget Dashboard</title>
+
+  <!-- Chart.js loaded from CDN — no local install needed -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+
+  <style>
+    /* ── CSS custom properties for easy theming ── */
+    :root {
+      --bg: #f5f7fa;
+      --card-bg: #ffffff;
+      --border: #e2e8f0;
+      --text: #1a202c;
+      --muted: #718096;
+      --accent: #4f46e5;
+      --accent-hover: #4338ca;
+      --success: #38a169;
+      --danger: #e53e3e;
+      --radius: 8px;
+      --shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.04);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 2rem 1rem;
+    }
+
+    /* ── Layout ── */
+    .container { max-width: 860px; margin: 0 auto; }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+
+    header h1 { font-size: 1.6rem; font-weight: 700; }
+    header h1 span { color: var(--accent); }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    /* ── Month selector ── */
+    .month-row {
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      flex-wrap: wrap;
+    }
+
+    label { font-weight: 600; font-size: .9rem; color: var(--muted); }
+
+    input[type="month"], input[type="text"], input[type="number"],
+    select, textarea {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: .45rem .75rem;
+      font-size: .95rem;
+      color: var(--text);
+      background: var(--card-bg);
+      outline: none;
+      transition: border-color .15s;
+    }
+
+    input[type="month"]:focus, input[type="text"]:focus,
+    input[type="number"]:focus, select:focus {
+      border-color: var(--accent);
+    }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: .4rem;
+      padding: .5rem 1.1rem;
+      border: none;
+      border-radius: var(--radius);
+      font-size: .9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .15s, transform .1s;
+    }
+    .btn:active { transform: scale(.97); }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-success { background: var(--success); color: #fff; }
+    .btn-success:hover { background: #2f855a; }
+
+    /* ── Summary numbers ── */
+    .summary {
+      display: flex;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+      margin-bottom: 1.5rem;
+    }
+
+    .stat-card {
+      flex: 1 1 160px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 1.1rem 1.25rem;
+    }
+
+    .stat-card .label { font-size: .78rem; font-weight: 700; text-transform: uppercase;
+                         letter-spacing: .06em; color: var(--muted); margin-bottom: .3rem; }
+    .stat-card .value { font-size: 1.6rem; font-weight: 700; }
+    .stat-card.income .value  { color: var(--success); }
+    .stat-card.expenses .value { color: var(--danger); }
+    .stat-card.net .value.positive { color: var(--success); }
+    .stat-card.net .value.negative { color: var(--danger); }
+
+    /* ── Chart area ── */
+    .chart-wrap {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 260px;
+    }
+
+    .chart-wrap canvas { max-width: 340px; max-height: 340px; }
+
+    .no-data {
+      color: var(--muted);
+      font-style: italic;
+      text-align: center;
+      padding: 2rem;
+    }
+
+    /* ── Add Entry form ── */
+    #add-entry-toggle { margin-bottom: 1.5rem; }
+
+    #entry-form { display: none; }
+    #entry-form.open { display: block; }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 1rem;
+      margin: 1rem 0 1.25rem;
+    }
+
+    .form-group { display: flex; flex-direction: column; gap: .35rem; }
+    .form-group label { font-size: .85rem; font-weight: 600; color: var(--muted); }
+
+    #form-error {
+      display: none;
+      background: #fff5f5;
+      color: var(--danger);
+      border: 1px solid #fed7d7;
+      border-radius: var(--radius);
+      padding: .6rem .9rem;
+      font-size: .88rem;
+      margin-bottom: 1rem;
+    }
+
+    #form-success {
+      display: none;
+      background: #f0fff4;
+      color: var(--success);
+      border: 1px solid #c6f6d5;
+      border-radius: var(--radius);
+      padding: .6rem .9rem;
+      font-size: .88rem;
+      margin-bottom: 1rem;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 500px) {
+      header { flex-direction: column; align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <h1>Budget <span>Dashboard</span></h1>
+    <div class="month-row">
+      <label for="month-picker">Month</label>
+      <input type="month" id="month-picker" />
+    </div>
+  </header>
+
+  <!-- ── Summary stats ── -->
+  <div class="summary">
+    <div class="stat-card income">
+      <div class="label">Income</div>
+      <div class="value" id="stat-income">—</div>
+    </div>
+    <div class="stat-card expenses">
+      <div class="label">Expenses</div>
+      <div class="value" id="stat-expenses">—</div>
+    </div>
+    <div class="stat-card net">
+      <div class="label">Net</div>
+      <div class="value" id="stat-net">—</div>
+    </div>
+  </div>
+
+  <!-- ── Pie chart ── -->
+  <div class="card">
+    <div class="chart-wrap" id="chart-wrap">
+      <p class="no-data" id="no-data-msg">No expense data for this month.</p>
+      <canvas id="pie-chart" style="display:none;"></canvas>
+    </div>
+  </div>
+
+  <!-- ── Add Entry ── -->
+  <div id="add-entry-toggle">
+    <button class="btn btn-primary" onclick="toggleForm()">+ Add Entry</button>
+  </div>
+
+  <div class="card" id="entry-form">
+    <h2 style="font-size:1.1rem; margin-bottom:.25rem;">New Entry</h2>
+    <p style="font-size:.85rem; color:var(--muted); margin-bottom:.75rem;">
+      Record an expense or income for the selected month.
+    </p>
+
+    <div id="form-error"></div>
+    <div id="form-success"></div>
+
+    <div class="form-grid">
+      <!-- Type -->
+      <div class="form-group">
+        <label for="f-type">Type</label>
+        <select id="f-type" onchange="onTypeChange()">
+          <option value="expense">Expense</option>
+          <option value="income">Income</option>
+        </select>
+      </div>
+
+      <!-- Amount -->
+      <div class="form-group">
+        <label for="f-amount">Amount ($)</label>
+        <input type="number" id="f-amount" min="0.01" step="0.01" placeholder="0.00" />
+      </div>
+
+      <!-- Category (expenses) / Source (income) -->
+      <div class="form-group" id="f-category-group">
+        <label for="f-category">Category</label>
+        <select id="f-category">
+          <!-- Populated by JS from CATEGORIES constant -->
+        </select>
+      </div>
+
+      <div class="form-group" id="f-source-group" style="display:none;">
+        <label for="f-source">Source</label>
+        <input type="text" id="f-source" placeholder="e.g. Salary, Freelance" />
+      </div>
+
+      <!-- Note -->
+      <div class="form-group">
+        <label for="f-note">Note (optional)</label>
+        <input type="text" id="f-note" placeholder="e.g. lunch, rent…" />
+      </div>
+    </div>
+
+    <button class="btn btn-success" onclick="submitEntry()">Save Entry</button>
+    <button class="btn" style="background:var(--border); margin-left:.5rem;" onclick="toggleForm()">
+      Cancel
+    </button>
+  </div>
+
+</div><!-- /container -->
+
+<script>
+// ── Constants ────────────────────────────────────────────────────────────────
+// Keep in sync with expenses.CATEGORIES in expenses.py
+const CATEGORIES = ["Food", "Transport", "Housing", "Entertainment", "Health", "Utilities", "Other"];
+
+// Palette for the pie chart slices (one colour per category, max 7)
+const PALETTE = [
+  "#4f46e5", "#7c3aed", "#db2777", "#ea580c",
+  "#ca8a04", "#16a34a", "#0891b2"
+];
+
+// ── State ────────────────────────────────────────────────────────────────────
+let pieChart = null;  // Chart.js instance (so we can destroy & recreate on update)
+
+// ── Initialise ───────────────────────────────────────────────────────────────
+(function init() {
+  // Populate category dropdown
+  const sel = document.getElementById("f-category");
+  CATEGORIES.forEach(cat => {
+    const opt = document.createElement("option");
+    opt.value = cat;
+    opt.textContent = cat;
+    sel.appendChild(opt);
+  });
+
+  // Default month picker to current month (YYYY-MM)
+  const picker = document.getElementById("month-picker");
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm   = String(now.getMonth() + 1).padStart(2, "0");
+  picker.value = `${yyyy}-${mm}`;
+
+  picker.addEventListener("change", () => loadReport());
+  loadReport();
+})();
+
+// ── Data loading ─────────────────────────────────────────────────────────────
+async function loadReport() {
+  const month = document.getElementById("month-picker").value;
+
+  let data;
+  try {
+    const res = await fetch(`/api/report?month=${encodeURIComponent(month)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    data = await res.json();
+  } catch (err) {
+    console.error("Failed to load report:", err);
+    return;
+  }
+
+  updateStats(data);
+  updateChart(data.totals);
+}
+
+// ── Stats panel ──────────────────────────────────────────────────────────────
+function updateStats(data) {
+  const totalExpenses = data.totals.reduce((sum, t) => sum + t.total, 0);
+  const net = data.income - totalExpenses;
+
+  document.getElementById("stat-income").textContent   = fmt(data.income);
+  document.getElementById("stat-expenses").textContent = fmt(totalExpenses);
+
+  const netEl = document.getElementById("stat-net");
+  netEl.textContent = fmt(net);
+  netEl.className   = "value " + (net >= 0 ? "positive" : "negative");
+}
+
+function fmt(n) {
+  return "$" + n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+// ── Pie chart ────────────────────────────────────────────────────────────────
+function updateChart(totals) {
+  const canvas  = document.getElementById("pie-chart");
+  const noData  = document.getElementById("no-data-msg");
+
+  if (!totals || totals.length === 0) {
+    canvas.style.display = "none";
+    noData.style.display = "block";
+    if (pieChart) { pieChart.destroy(); pieChart = null; }
+    return;
+  }
+
+  noData.style.display  = "none";
+  canvas.style.display  = "block";
+
+  const labels = totals.map(t => t.category);
+  const values = totals.map(t => t.total);
+  const colors = totals.map((_, i) => PALETTE[i % PALETTE.length]);
+
+  if (pieChart) {
+    // Update existing chart in place — avoids the "canvas already in use" error
+    pieChart.data.labels          = labels;
+    pieChart.data.datasets[0].data   = values;
+    pieChart.data.datasets[0].backgroundColor = colors;
+    pieChart.update();
+  } else {
+    pieChart = new Chart(canvas, {
+      type: "pie",
+      data: {
+        labels,
+        datasets: [{
+          data: values,
+          backgroundColor: colors,
+          borderWidth: 2,
+          borderColor: "#fff",
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: {
+            position: "right",
+            labels: { font: { size: 13 }, padding: 16 }
+          },
+          tooltip: {
+            callbacks: {
+              label(ctx) {
+                const val   = ctx.parsed;
+                const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                const pct   = ((val / total) * 100).toFixed(1);
+                return ` ${ctx.label}: $${val.toFixed(2)} (${pct}%)`;
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+}
+
+// ── Form helpers ─────────────────────────────────────────────────────────────
+function toggleForm() {
+  const form = document.getElementById("entry-form");
+  form.classList.toggle("open");
+  clearFormMessages();
+}
+
+function onTypeChange() {
+  const type = document.getElementById("f-type").value;
+  document.getElementById("f-category-group").style.display = type === "expense" ? "" : "none";
+  document.getElementById("f-source-group").style.display   = type === "income"  ? "" : "none";
+}
+
+function clearFormMessages() {
+  const errEl  = document.getElementById("form-error");
+  const okEl   = document.getElementById("form-success");
+  errEl.style.display = "none";
+  okEl.style.display  = "none";
+}
+
+function showError(msg) {
+  const el = document.getElementById("form-error");
+  el.textContent    = msg;
+  el.style.display  = "block";
+  document.getElementById("form-success").style.display = "none";
+}
+
+function showSuccess(msg) {
+  const el = document.getElementById("form-success");
+  el.textContent    = msg;
+  el.style.display  = "block";
+  document.getElementById("form-error").style.display = "none";
+}
+
+// ── Form submission ───────────────────────────────────────────────────────────
+async function submitEntry() {
+  clearFormMessages();
+
+  const type   = document.getElementById("f-type").value;
+  const amount = parseFloat(document.getElementById("f-amount").value);
+  const note   = document.getElementById("f-note").value.trim();
+
+  if (isNaN(amount) || amount <= 0) {
+    showError("Please enter a valid amount greater than zero.");
+    return;
+  }
+
+  let url, body;
+
+  if (type === "expense") {
+    const category = document.getElementById("f-category").value;
+    url  = "/api/expense";
+    body = { amount, category, note };
+  } else {
+    const source = document.getElementById("f-source").value.trim();
+    url  = "/api/income";
+    body = { amount, source, note };
+  }
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    const json = await res.json();
+
+    if (!res.ok) {
+      showError(json.error || `Server error (${res.status})`);
+      return;
+    }
+
+    showSuccess("Entry saved successfully!");
+
+    // Reset fields (but leave type and month alone)
+    document.getElementById("f-amount").value = "";
+    document.getElementById("f-note").value   = "";
+    document.getElementById("f-source").value = "";
+
+    // Refresh the chart and stats to reflect the new entry
+    loadReport();
+
+  } catch (err) {
+    showError("Network error — could not reach the server.");
+    console.error(err);
+  }
+}
+</script>
+</body>
+</html>
+Bash Verify all new files exist
+IN
+ls "C:/Users/cdhar/Documents/Source/the_agentic_developer_2026_05_Ela/Teams/Breakout 3/" && ls "C:/Users/cdhar/Documents/Source/the_agentic_developer_2026_05_Ela/Teams/Breakout 3/templates/"
+
+OUT
+CLAUDE.md
+__pycache__
+budget.db
+budget.py
+chart.py
+db.py
+expenses.py
+income.py
+requirements.txt
+server.py
+templates
+test_budget.py
+test_chart.py
+index.html
+Bash Check server.py for syntax errors
+IN
+cd "C:/Users/cdhar/Documents/Source/the_agentic_developer_2026_05_Ela/Teams/Breakout 3" && python -m py_compile server.py && echo "server.py: OK"
+
+OUT
+server.py: OK
+Bash Run existing tests to confirm nothing is broken
+IN
+cd "C:/Users/cdhar/Documents/Source/the_agentic_developer_2026_05_Ela/Teams/Breakout 3" && python -m pytest test_budget.py test_chart.py -q 2>&1
+
+OUT
+Exit code 1
+C:\Users\cdhar\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\python.exe: No module named pytest
+Bash Run existing tests with unittest to confirm nothing is broken
+IN
+cd "C:/Users/cdhar/Documents/Source/the_agentic_developer_2026_05_Ela/Teams/Breakout 3" && python -m unittest test_budget test_chart -v 2>&1
+
+OUT
+test_cmd_add_no_note (test_budget.TestBudgetCLI.test_cmd_add_no_note) ... ok
+test_cmd_add_prints_confirmation (test_budget.TestBudgetCLI.test_cmd_add_prints_confirmation) ... ok
+test_cmd_income_prints_confirmation (test_budget.TestBudgetCLI.test_cmd_income_prints_confirmation) ... ok
+test_cmd_list_empty (test_budget.TestBudgetCLI.test_cmd_list_empty) ... ok
+test_cmd_list_shows_expenses (test_budget.TestBudgetCLI.test_cmd_list_shows_expenses) ... ok
+test_cmd_report_expense_only (test_budget.TestBudgetCLI.test_cmd_report_expense_only) ... ok
+test_cmd_report_no_data (test_budget.TestBudgetCLI.test_cmd_report_no_data) ... ok
+test_cmd_report_with_income_shows_net (test_budget.TestBudgetCLI.test_cmd_report_with_income_shows_net) ... ok
+test_add_expense_records_correctly (test_budget.TestExpenses.test_add_expense_records_correctly) ... ok
+test_invalid_category_raises (test_budget.TestExpenses.test_invalid_category_raises) ... ok
+test_monthly_totals_aggregate_by_category (test_budget.TestExpenses.test_monthly_totals_aggregate_by_category) ... ok
+test_note_is_optional (test_budget.TestExpenses.test_note_is_optional) ... ok
+test_valid_categories_are_accepted (test_budget.TestExpenses.test_valid_categories_are_accepted) ... ok
+test_add_income_records_correctly (test_budget.TestIncome.test_add_income_records_correctly) ... ok
+test_monthly_income_total (test_budget.TestIncome.test_monthly_income_total) ... ok
+test_monthly_income_total_zero_when_none (test_budget.TestIncome.test_monthly_income_total_zero_when_none) ... ok
+test_net_calculation (test_budget.TestIncome.test_net_calculation) ... ok
+test_source_and_note_are_optional (test_budget.TestIncome.test_source_and_note_are_optional) ... ok
+test_all_categories_appear_in_legend (test_budget.TestPieChart.test_all_categories_appear_in_legend) ... ok
+test_bar_is_correct_width (test_budget.TestPieChart.test_bar_is_correct_width) ... ok
+test_empty_totals_prints_nothing (test_budget.TestPieChart.test_empty_totals_prints_nothing) ... ok
+test_percentages_sum_to_100 (test_budget.TestPieChart.test_percentages_sum_to_100) ... ok
+test_single_category_fills_bar (test_budget.TestPieChart.test_single_category_fills_bar) ... ok
+test_eight_categories_wraps_fill (test_chart.TestBarWidth.test_eight_categories_wraps_fill)
+More categories than fill chars � fill cycling must not break bar width. ... ok
+test_large_amounts_do_not_overflow_bar (test_chart.TestBarWidth.test_large_amounts_do_not_overflow_bar) ... ok
+test_many_categories_with_awkward_totals (test_chart.TestBarWidth.test_many_categories_with_awkward_totals)
+Prime-like totals stress the rounding remainder logic. ... ok
+test_seven_categories (test_chart.TestBarWidth.test_seven_categories)
+Exactly as many categories as fill characters. ... ok
+test_single_category (test_chart.TestBarWidth.test_single_category) ... ok
+test_small_fractions_that_round_to_zero (test_chart.TestBarWidth.test_small_fractions_that_round_to_zero)
+A very small category may round to 0 chars � bar must still be _WIDTH. ... ok
+test_three_categories (test_chart.TestBarWidth.test_three_categories) ... ok
+test_two_equal_categories (test_chart.TestBarWidth.test_two_equal_categories) ... ok
+test_two_unequal_categories (test_chart.TestBarWidth.test_two_unequal_categories) ... ok
+test_large_dollar_amount (test_chart.TestDollarFormatting.test_large_dollar_amount) ... ok
+test_multiple_amounts_all_present (test_chart.TestDollarFormatting.test_multiple_amounts_all_present) ... ok
+test_very_small_dollar_amount (test_chart.TestDollarFormatting.test_very_small_dollar_amount) ... ok
+test_whole_dollar_amount_has_two_decimal_places (test_chart.TestDollarFormatting.test_whole_dollar_amount_has_two_decimal_places) ... ok
+test_bar_fill_chars_cycle_for_many_categories (test_chart.TestFillCharacterCycling.test_bar_fill_chars_cycle_for_many_categories)
+The bar itself must also cycle fills � verify via first char of each segment. ... ok
+test_double_wrap_at_fourteen_categories (test_chart.TestFillCharacterCycling.test_double_wrap_at_fourteen_categories)
+14 categories = 2 full cycles through 7 fills; no IndexError should occur. ... ok
+test_eighth_category_wraps_to_first_fill (test_chart.TestFillCharacterCycling.test_eighth_category_wraps_to_first_fill) ... ok
+test_first_seven_categories_use_distinct_fills (test_chart.TestFillCharacterCycling.test_first_seven_categories_use_distinct_fills) ... ok
+test_category_name_appears (test_chart.TestLegendLines.test_category_name_appears) ... ok
+test_correct_number_of_legend_lines (test_chart.TestLegendLines.test_correct_number_of_legend_lines)
+There must be exactly one legend line per input category. ... ok
+test_dollar_amount_formatted_to_two_decimal_places (test_chart.TestLegendLines.test_dollar_amount_formatted_to_two_decimal_places) ... ok
+test_fill_prefix_in_legend (test_chart.TestLegendLines.test_fill_prefix_in_legend)
+Each legend line must start (after whitespace) with two copies of its fill char. ... ok
+test_percentage_for_equal_split (test_chart.TestLegendLines.test_percentage_for_equal_split) ... ok
+test_percentage_for_single_category_is_100 (test_chart.TestLegendLines.test_percentage_for_single_category_is_100) ... ok
+test_percentages_sum_to_100 (test_chart.TestLegendLines.test_percentages_sum_to_100) ... ok
+test_zero_cents_formatted_correctly (test_chart.TestLegendLines.test_zero_cents_formatted_correctly) ... ok
+test_bar_line_contains_brackets (test_chart.TestOutputStructure.test_bar_line_contains_brackets) ... ok
+test_bar_line_format_with_leading_spaces (test_chart.TestOutputStructure.test_bar_line_format_with_leading_spaces)
+Bar line must be '  [<bar>]' � two leading spaces, then brackets. ... ok
+test_blank_line_after_bar (test_chart.TestOutputStructure.test_blank_line_after_bar)
+There should be a blank line between the bar and the legend. ... ok
+test_legend_lines_have_leading_spaces (test_chart.TestOutputStructure.test_legend_lines_have_leading_spaces)
+Each legend line must start with two spaces (matching the bar line indent). ... ok
+test_print_called_correct_number_of_times (test_chart.TestOutputStructure.test_print_called_correct_number_of_times)
+For n categories: 1 (bar) + 1 (blank) + n (legend) + 1 (trailing blank) = n+3 calls. ... ok
+test_trailing_blank_line_after_legend (test_chart.TestOutputStructure.test_trailing_blank_line_after_legend)
+Output must end with a trailing newline (blank line after legend). ... ok
+test_all_zero_totals_prints_nothing (test_chart.TestPieChartEarlyReturn.test_all_zero_totals_prints_nothing)
+Rows whose totals are all 0.0 must not call print. ... ok
+test_empty_list_prints_nothing (test_chart.TestPieChartEarlyReturn.test_empty_list_prints_nothing)
+An empty input list must not call print at all. ... ok
+test_mix_of_zero_and_nonzero_does_produce_output (test_chart.TestPieChartEarlyReturn.test_mix_of_zero_and_nonzero_does_produce_output)
+As long as at least one row has a non-zero total the chart renders. ... ok
+test_returns_none_on_nonzero_grand (test_chart.TestPieChartEarlyReturn.test_returns_none_on_nonzero_grand)
+pie_chart has no return value � must return None for non-zero input too. ... ok
+test_returns_none_on_zero_grand (test_chart.TestPieChartEarlyReturn.test_returns_none_on_zero_grand)
+pie_chart must explicitly return None (no value) for zero grand total. ... ok
+test_single_zero_total_prints_nothing (test_chart.TestPieChartEarlyReturn.test_single_zero_total_prints_nothing) ... ok
+test_last_segment_can_be_zero_width (test_chart.TestRoundingRemainder.test_last_segment_can_be_zero_width)
+If rounding uses exactly _WIDTH for earlier segments the last one gets 0 chars. ... ok
+test_many_small_equal_categories (test_chart.TestRoundingRemainder.test_many_small_equal_categories)
+11 categories of equal size (not a divisor of 40) must still fill bar exactly. ... ok
+test_prime_divisor_totals (test_chart.TestRoundingRemainder.test_prime_divisor_totals)
+Totals chosen so individual rounded segments never add to exactly 40. ... ok
+test_thirds_sum_to_full_width (test_chart.TestRoundingRemainder.test_thirds_sum_to_full_width)
+Three equal thirds (100/3 each) cannot divide _WIDTH evenly; bar must still be 40. ... ok
+test_very_skewed_distribution (test_chart.TestRoundingRemainder.test_very_skewed_distribution)
+One tiny and one huge category � rounding of the tiny one must not lose characters. ... ok
+test_bar_is_entirely_first_fill_char (test_chart.TestSingleCategory.test_bar_is_entirely_first_fill_char) ... ok
+test_bar_is_full_width (test_chart.TestSingleCategory.test_bar_is_full_width) ... ok
+test_legend_shows_100_percent (test_chart.TestSingleCategory.test_legend_shows_100_percent) ... ok
+test_legend_shows_correct_amount (test_chart.TestSingleCategory.test_legend_shows_correct_amount) ... ok
+
+----------------------------------------------------------------------
+Ran 69 tests in 0.079s
+
+OK
+  [########################################]
+
+  ## Food             $   10.00  100.0%
+Phase 1 complete. Let me verify the files were actually created before moving to Phase 2.
+
+Globpattern: "Teams/Breakout 3/server.py"
+Found 1 file
+Globpattern: "Teams/Breakout 3/templates/**"
+Found 1 file
+Globpattern: "Teams/Breakout 3/requirements.txt"
+Found 1 file
+All 3 files confirmed. Now launching Phase 2 — both agents in parallel.
+
+Phase 2 — Parallel: Unit Tests + Documentation
+Agent:Write unit tests for server.py
+IN
+You are the **python-unit-test-writer** agent. You write comprehensive, maintainable pytest unit tests. This is a teaching environment — explain your testing strategy briefly.
+
+## Project location
+`C:\Users\cdhar\Documents\Source\the_agentic_developer_2026_05_Ela\Teams\Breakout 3\`
+
+## What was just implemented
+A new file `server.py` was created — a Flask web server for a personal budgeting CLI app. It has 4 routes:
+- `GET /` — serves `templates/index.html`
+- `GET /api/report?month=YYYY-MM` — returns JSON with income total and expense totals by category
+- `POST /api/expense` — JSON body `{amount, category, note}` — calls `expenses.add_expense()`; validates category against `expenses.CATEGORIES`; returns `{"ok": true}` or HTTP 400
+- `POST /api/income` — JSON body `{amount, source, note}` — calls `income.add_income()`; returns `{"ok": true}`
+
+## Existing test files to follow as convention
+- `test_budget.py` — existing tests, read these for style/pattern
+- `test_chart.py` — existing tests, read these for style/pattern
+
+## Existing memory/conventions
+Check `C:\Users\cdhar\Documents\Source\the_agentic_developer_2026_05_Ela\Teams\Breakout 3\.claude\agents\agent-memory\python-unit-test-writer\` for any saved conventions.
+
+## Your task
+1. Read `server.py` fully to understand the implementation
+2. Read existing test files for conventions
+3. Create `test_server.py` in `Teams/Breakout 3/` with tests covering:
+   - `GET /api/report` returns correct JSON structure for a month with data
+   - `GET /api/report` returns empty totals and zero income for a month with no data
+   - `POST /api/expense` with valid data returns `{"ok": true}` and persists the expense
+   - `POST /api/expense` with invalid category returns HTTP 400
+   - `POST /api/expense` with missing fields returns an error (not 500)
+   - `POST /api/income` with valid data returns `{"ok": true}` and persists the income
+   - `GET /` returns HTTP 200 and contains expected HTML content
+
+   Use Flask's test client (`app.test_client()`) — do NOT hit a live server.
+   Use a temporary SQLite database (tmp_path or tempfile) so tests don't touch the real `budget.db`.
+
+4. Run the tests with `pytest test_server.py -v` and confirm they pass
+5. Summarize: files created, test count, coverage highlights
+
+Platform: Windows / PowerShell.
+Agent:Update user manual for web UI
+IN
+You are the **budget-manual-writer** agent. You are an expert technical writer for CLI and developer tools. This is a teaching environment.
+
+## Project location
+`C:\Users\cdhar\Documents\Source\the_agentic_developer_2026_05_Ela\Teams\Breakout 3\`
+
+## What was just implemented
+A new **web UI** was added to the personal budgeting CLI app. New files:
+- `server.py` — Flask web server. Run with `python server.py`, then open `http://localhost:5000`
+- `templates/index.html` — dashboard with month picker, pie chart (Chart.js), income/expense stats, and an "Add Entry" form
+- `requirements.txt` — contains `flask`
+
+Routes:
+- `GET /` — dashboard
+- `GET /api/report?month=YYYY-MM` — JSON report
+- `POST /api/expense` — add expense
+- `POST /api/income` — add income
+
+The existing CLI (`budget.py`) is unchanged and still works. Both CLI and web UI share the same `budget.db`.
+
+## Your task
+1. Check if `USER_MANUAL.md` exists in `Teams/Breakout 3/`. If it does, read it and update it. If not, create it from scratch.
+2. Read `budget.py`, `expenses.py`, `income.py`, `server.py` to derive accurate documentation.
+3. The manual must include these sections (update or add as needed):
+   - **Overview** — what the app does, two interfaces (CLI + web)
+   - **Requirements & Installation** — Python 3, `pip install flask` for the web UI, no other deps
+   - **Quick Start** — show both CLI and web UI paths
+   - **CLI Commands Reference** — add, income, list, report (with PowerShell examples)
+   - **Web UI** — how to start the server, what the dashboard shows, how to use the Add Entry form, note that Chart.js requires internet
+   - **Categories** — list from `expenses.CATEGORIES`
+   - **Custom Slash Commands** — `/add-expense`, `/add-income`, `/monthly-report`, `/categorize`, `/commit`
+   - **Tips & Common Workflows**
+   - **Troubleshooting** — common errors including Flask not installed
+
+4. Writing standards:
+   - Plain English, short sentences, active voice
+   - All command examples use `powershell` fenced code blocks
+   - Every example is a real, runnable command
+   - Valid Markdown
+
+5. After writing, summarize what was created/updated and note any discrepancies found.
+
+Platform: Windows / PowerShell.
+Read C:\Users\cdhar\Documents\Source\the_agentic_developer_2026_05_Ela\Teams\Breakout 3\test_chart.py
+Read C:\Users\cdhar\Documents\Source\the_agentic_developer_2026_05_Ela\Teams\Breakout 3\income.py
+Globpattern: "templates/**/*"
+No files found
+Globpattern: "USER_MANUAL.md"
+No files found
+Both Phase 2 agents are now running in parallel in the background:
+
+python-unit-test-writer — writing test_server.py with Flask test client coverage
+budget-manual-writer — creating/updating USER_MANUAL.md to include the new web UI section
+I'll report back with the full delivery summary once both complete.
+
+What just happened and why this order matters:
+
+Phase 1 had to finish first because both Phase 2 agents depend on knowing exactly what was built — the test writer needs to see server.py's actual routes and behavior, and the manual writer needs the real command syntax. Running them in parallel after implementation is safe because they write to completely different files (test_server.py vs USER_MANUAL.md) with no overlap.
+
+Read C:\Users\cdhar\Documents\Source\the_agentic_developer_2026_05_Ela\Teams\Breakout 3\.claude\agents\agent-memory\python-unit-test-writer\project-testing-conventions.md
+Read C:\Users\cdhar\Documents\Source\the_agentic_developer_2026_05_Ela\Teams\Breakout 3\server.py
+Bash List all files in Breakout 3 directory
+IN
+ls "C:\Users\cdhar\Documents\Source\the_agentic_developer_2026_05_Ela\Teams\Breakout 3"
+
+OUT
+CLAUDE.md
+__pycache__
+budget.db
+budget.py
+chart.py
+db.py
+expenses.py
+income.py
+requirements.txt
+server.py
+templates
+test_budget.py
+test_chart.py
+Read C:\Users\cdhar\Documents\Source\the_agentic_developer_2026_05_Ela\Teams\Breakout 3\requirements.txt
+Read C:\Users\cdhar\Documents\Source\the_agentic_developer_2026_05_Ela\Teams\Breakout 3\templates\index.html
+Globpattern: "**/*.md"
+Found 6 files
+Write C:\Users\cdhar\Documents\Source\the_agentic_developer_2026_05_Ela\Teams\Breakout 3\USER_MANUAL.md
+357 lines
+# Personal Budget Tracker — User Manual
+
+## Overview
+
+Personal Budget Tracker is a lightweight Python app for recording income and expenses on your local machine. All data is stored in a SQLite database (`budget.db`) that is created automatically on first run.
+
+The app offers two interfaces that share the same data store:
+
+- **CLI** — run commands directly in your terminal with `budget.py`
+- **Web UI** — a browser dashboard served by `server.py`
+
+You can use both interfaces at the same time. Changes made in one are immediately visible in the other.
+
+---
+
+## Requirements & Installation
+
+**Required:**
+
+- Python 3.8 or later (standard library only for the CLI)
+
+**Required for the web UI only:**
+
+```powershell
+pip install flask
+```
+
+No other third-party packages are needed. The web dashboard loads Chart.js from a CDN at runtime, so the browser must have internet access for the pie chart to render.
+
+---
+
+## Quick Start
+
+### CLI path
+
+```powershell
+# Navigate to the project folder
+cd "Teams\Breakout 3"
+
+# Record an expense
+python budget.py add 45.00 Food "weekly groceries"
+
+# Record income
+python budget.py income 3000.00 Salary "June paycheck"
+
+# View this month's report
+python budget.py report
+```
+
+### Web UI path
+
+```powershell
+# Start the server (Flask must be installed first)
+python server.py
+```
+
+Open `http://localhost:5000` in your browser. The dashboard loads the current month automatically.
+
+Stop the server with `Ctrl+C` in the terminal.
+
+---
+
+## CLI Commands Reference
+
+All commands follow the pattern:
+
+```powershell
+python budget.py <command> [arguments]
+```
+
+### `add` — Record an expense
+
+```powershell
+python budget.py add <amount> <category> [note]
+```
+
+| Argument | Required | Description |
+|---|---|---|
+| `amount` | Yes | Dollar amount (e.g. `12.50`) |
+| `category` | Yes | One of the valid categories (see [Categories](#categories)) |
+| `note` | No | Free-text description |
+
+**Examples:**
+
+```powershell
+# Expense with no note
+python budget.py add 3.50 Transport
+
+# Expense with a note
+python budget.py add 85.00 Utilities "electric bill"
+```
+
+### `income` — Record income
+
+```powershell
+python budget.py income <amount> <source> [note]
+```
+
+| Argument | Required | Description |
+|---|---|---|
+| `amount` | Yes | Dollar amount |
+| `source` | Yes | Free-text source label (e.g. `Salary`, `Freelance`) |
+| `note` | No | Free-text description |
+
+**Examples:**
+
+```powershell
+python budget.py income 2500.00 Salary
+python budget.py income 350.00 Freelance "logo design project"
+```
+
+### `list` — List recent expenses
+
+```powershell
+python budget.py list [--month YYYY-MM]
+```
+
+Without `--month`, the command returns the 50 most recent expenses across all time. With `--month`, it returns all expenses for that month.
+
+**Examples:**
+
+```powershell
+# Last 50 expenses
+python budget.py list
+
+# All expenses for a specific month
+python budget.py list --month 2026-06
+```
+
+### `report` — Monthly spending summary
+
+```powershell
+python budget.py report [--month YYYY-MM]
+```
+
+Prints a table showing spending by category, total expenses, total income (if any), and net balance. Also renders an ASCII pie chart in the terminal. Defaults to the current month.
+
+**Examples:**
+
+```powershell
+# Current month
+python budget.py report
+
+# Specific month
+python budget.py report --month 2025-12
+```
+
+---
+
+## Web UI
+
+### Starting the server
+
+```powershell
+python server.py
+```
+
+The server starts on port 5000. Open `http://localhost:5000` in any browser.
+
+The server auto-reloads when you edit `server.py` (Flask's debug mode is enabled by default during development). Do not use debug mode in production.
+
+### What the dashboard shows
+
+The dashboard has three sections:
+
+1. **Summary stats** — Income, Expenses, and Net balance for the selected month, shown as colored cards at the top.
+2. **Pie chart** — Expense breakdown by category. The chart updates automatically when you change the month or add an entry. If there are no expenses, a "No expense data" message is shown instead. Chart.js is loaded from a CDN; the chart will not render without an internet connection.
+3. **Add Entry form** — Expandable form for recording a new expense or income (see below).
+
+### Changing the month
+
+Use the **Month** picker in the top-right corner. The stats and pie chart update immediately.
+
+### Adding an entry
+
+1. Click **+ Add Entry** to expand the form.
+2. Select the **Type**: Expense or Income.
+   - For an expense: choose a **Category** from the dropdown.
+   - For income: enter a **Source** (e.g. `Salary`).
+3. Enter the **Amount** in dollars.
+4. Optionally enter a **Note**.
+5. Click **Save Entry**.
+
+The dashboard stats and pie chart refresh automatically after a successful save. Error messages appear inline if the amount is missing or the category is invalid.
+
+### API endpoints
+
+The dashboard uses these JSON endpoints. You can call them directly with `curl` or any HTTP client.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/report?month=YYYY-MM` | Returns income, expense totals by category, and month |
+| `POST` | `/api/expense` | Add an expense — body: `{"amount": float, "category": str, "note": str}` |
+| `POST` | `/api/income` | Add income — body: `{"amount": float, "source": str, "note": str}` |
+
+**Example — fetch a report:**
+
+```powershell
+Invoke-RestMethod "http://localhost:5000/api/report?month=2026-06"
+```
+
+**Example — add an expense via API:**
+
+```powershell
+Invoke-RestMethod -Method Post -Uri "http://localhost:5000/api/expense" `
+  -ContentType "application/json" `
+  -Body '{"amount": 12.50, "category": "Food", "note": "lunch"}'
+```
+
+---
+
+## Categories
+
+Expenses must use one of these fixed categories:
+
+| Category | Description |
+|---|---|
+| `Food` | Groceries, restaurants, takeout |
+| `Transport` | Fuel, transit, rideshare |
+| `Housing` | Rent, mortgage, repairs |
+| `Entertainment` | Streaming, events, hobbies |
+| `Health` | Medical, pharmacy, gym |
+| `Utilities` | Electric, water, internet, phone |
+| `Other` | Anything that doesn't fit above |
+
+Category names are case-sensitive. Use the exact spelling shown above. The CLI will reject an unrecognised category with an error message listing valid options.
+
+Income does not use categories — it uses a free-text `source` label instead.
+
+---
+
+## Custom Slash Commands
+
+These commands are available inside Claude Code (`.claude/commands/`). Run them by typing `/command-name` in the Claude Code chat.
+
+### `/add-expense <amount> <category> [note]`
+
+Parses your arguments, normalises the category to title case, and runs `budget.py add`. Asks for missing required fields before proceeding.
+
+```
+/add-expense 9.99 Food coffee
+```
+
+### `/add-income <amount> <source> [note]`
+
+Parses your arguments and runs `budget.py income`. Asks for missing required fields before proceeding.
+
+```
+/add-income 1500 Freelance "consulting invoice"
+```
+
+### `/monthly-report [YYYY-MM]`
+
+Runs `budget.py report` for the given month (or the current month if omitted) and adds a one-sentence observation about the data.
+
+```
+/monthly-report
+/monthly-report 2026-05
+```
+
+### `/categorize <amount> <description>`
+
+Claude reads the description, picks the best-fit category, and asks you to confirm before recording the expense. Useful when you are unsure which category to use.
+
+```
+/categorize 22.00 "Uber to the airport"
+```
+
+### `/commit [title]`
+
+Stages relevant changes, runs the `ensure-tests` skill, writes a concise commit summary, and commits. Does not push to the remote.
+
+```
+/commit "add web UI"
+```
+
+---
+
+## Tips & Common Workflows
+
+**End-of-month review**
+
+```powershell
+python budget.py report --month 2026-05
+```
+
+Or open the dashboard, pick the month in the picker, and review the pie chart visually.
+
+**Bulk data entry via CLI**
+
+The CLI is faster than the web form when entering many transactions at once. Open PowerShell, navigate to the project folder, and run one `add` command per transaction.
+
+**Checking a specific category**
+
+Use `list` with `--month` and scan the output — the category column is right-aligned for easy reading.
+
+```powershell
+python budget.py list --month 2026-06
+```
+
+**Using both interfaces simultaneously**
+
+Start the server in one terminal window and keep a second terminal open for CLI commands. Both read from and write to the same `budget.db`, so the dashboard reflects CLI entries immediately on the next page load or month change.
+
+**Letting Claude categorize for you**
+
+Use `/categorize` when you are unsure of the right category. Claude reasons from the description and asks for confirmation, so you stay in control of the final choice.
+
+---
+
+## Troubleshooting
+
+### `ModuleNotFoundError: No module named 'flask'`
+
+Flask is not installed. Run:
+
+```powershell
+pip install flask
+```
+
+Then start the server again.
+
+### `python: command not found` or similar
+
+Your Python 3 installation may be registered as `python3` on your system. Try:
+
+```powershell
+python3 budget.py report
+python3 server.py
+```
+
+### `budget.py: error: argument category: invalid choice`
+
+The category you entered does not match the allowed list. Categories are case-sensitive. Valid values: `Food`, `Transport`, `Housing`, `Entertainment`, `Health`, `Utilities`, `Other`.
+
+### The pie chart does not appear in the web UI
+
+Chart.js loads from `cdn.jsdelivr.net`. If you are offline or the CDN is blocked, the chart canvas stays hidden. The stats (Income, Expenses, Net) still work because they are calculated server-side.
+
+### Port 5000 is already in use
+
+Another process is using port 5000. Either stop that process, or edit the last line of `server.py` to use a different port:
+
+```python
+app.run(debug=True, port=5001)
+```
+
+Then open `http://localhost:5001` instead.
+
+### `budget.db` permissions error
+
+SQLite creates `budget.db` in the same folder as `budget.py`. Make sure your user account has write permission to the `Teams\Breakout 3\` directory.
+
+### Changes in the web UI do not appear in the CLI report
+
+Both tools share the same `budget.db`. If data seems out of sync, verify you are running both commands from the same `Teams\Breakout 3\` directory — running `budget.py` from a different working directory would create a second database file.
+Write C:\Users\cdhar\Documents\Source\the_agentic_developer_2026_05_Ela\Teams\Breakout 3\test_server.py
+360 lines
+"""
+test_server.py — Flask route tests for server.py
+
+Testing strategy
+----------------
+1. Framework: unittest.TestCase exclusively (project convention — no pytest).
+2. Database isolation: patch("db.get_conn") with an in-memory SQLite connection so
+   every test starts with a clean schema and no file I/O touches budget.db.
+3. Flask test client: app.test_client() — no live server is started.
+4. server.py calls db.init_db() at module import time, so we must ensure the
+   in-memory DB patch is active before the Flask app processes any request.
+   We achieve this by patching get_conn in setUp *before* creating the client,
+   which patches the underlying module that server.py (and expenses/income) import.
+5. Template rendering (GET /): Flask resolves templates relative to the app's
+   template_folder. The real templates/ directory exists next to server.py, so
+   render_template works as-is under the test client.
+"""
+
+import io
+import json
+import os
+import sqlite3
+import sys
+import unittest
+from unittest.mock import patch
+
+# Ensure the source directory is on the path so imports resolve regardless of
+# where the test runner is invoked from.
+sys.path.insert(0, os.path.dirname(__file__))
+
+
+# ---------------------------------------------------------------------------
+# Shared DB helper (mirrors _DBMixin in test_budget.py)
+# ---------------------------------------------------------------------------
+
+def _make_in_memory_conn():
+    """Return a fresh in-memory SQLite connection with Row factory set."""
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+class _ServerDBMixin(unittest.TestCase):
+    """
+    Base class that:
+      - swaps db.get_conn() for an in-memory connection for every test
+      - initialises the schema (expenses + income tables)
+      - provides self.client (Flask test client) ready to use
+    """
+
+    def setUp(self):
+        self._conn = _make_in_memory_conn()
+        self._patch = patch("db.get_conn", return_value=self._conn)
+        self._patch.start()
+
+        # init_db() was already called at module import time with whatever
+        # connection existed then; call it again now so our in-memory DB
+        # has the schema.
+        import db
+        db.init_db()
+
+        import server
+        server.app.config["TESTING"] = True
+        self.client = server.app.test_client()
+
+    def tearDown(self):
+        self._patch.stop()
+        self._conn.close()
+
+
+# ---------------------------------------------------------------------------
+# GET /api/report
+# ---------------------------------------------------------------------------
+
+class TestApiReport(_ServerDBMixin):
+    """Tests for GET /api/report?month=YYYY-MM"""
+
+    def test_report_returns_correct_json_structure(self):
+        """A month with data returns the expected keys and types."""
+        import expenses, income
+        expenses.add_expense(12.50, "Food", "lunch", date="2026-06-01")
+        expenses.add_expense(20.00, "Transport", "bus pass", date="2026-06-05")
+        income.add_income(3000.00, "Salary", date="2026-06-01")
+
+        resp = self.client.get("/api/report?month=2026-06")
+        self.assertEqual(resp.status_code, 200)
+
+        data = json.loads(resp.data)
+        self.assertIn("month", data)
+        self.assertIn("income", data)
+        self.assertIn("totals", data)
+        self.assertEqual(data["month"], "2026-06")
+        self.assertAlmostEqual(data["income"], 3000.00)
+        self.assertIsInstance(data["totals"], list)
+
+    def test_report_totals_aggregate_by_category(self):
+        """Multiple expenses in the same category are summed."""
+        import expenses
+        expenses.add_expense(10.00, "Food", "breakfast", date="2026-06-01")
+        expenses.add_expense(5.00, "Food", "snack", date="2026-06-02")
+        expenses.add_expense(50.00, "Housing", "rent", date="2026-06-01")
+
+        resp = self.client.get("/api/report?month=2026-06")
+        data = json.loads(resp.data)
+
+        totals_by_cat = {row["category"]: row["total"] for row in data["totals"]}
+        self.assertAlmostEqual(totals_by_cat["Food"], 15.00)
+        self.assertAlmostEqual(totals_by_cat["Housing"], 50.00)
+
+    def test_report_empty_month_returns_zero_income_and_empty_totals(self):
+        """A month with no data returns income=0.0 and totals=[]."""
+        resp = self.client.get("/api/report?month=2099-01")
+        self.assertEqual(resp.status_code, 200)
+
+        data = json.loads(resp.data)
+        self.assertEqual(data["month"], "2099-01")
+        self.assertAlmostEqual(data["income"], 0.0)
+        self.assertEqual(data["totals"], [])
+
+    def test_report_defaults_to_current_month_when_param_omitted(self):
+        """Omitting ?month must not raise an error and must return valid JSON."""
+        resp = self.client.get("/api/report")
+        self.assertEqual(resp.status_code, 200)
+        data = json.loads(resp.data)
+        # month key must be present and look like YYYY-MM
+        self.assertRegex(data["month"], r"^\d{4}-\d{2}$")
+
+    def test_report_totals_each_have_category_and_total_keys(self):
+        """Every item in totals must expose 'category' (str) and 'total' (float)."""
+        import expenses
+        expenses.add_expense(30.00, "Entertainment", "movie", date="2026-06-10")
+
+        resp = self.client.get("/api/report?month=2026-06")
+        data = json.loads(resp.data)
+        for item in data["totals"]:
+            self.assertIn("category", item)
+            self.assertIn("total", item)
+            self.assertIsInstance(item["category"], str)
+            self.assertIsInstance(item["total"], float)
+
+    def test_report_excludes_other_months(self):
+        """Expenses from a different month must not appear in the requested month's totals."""
+        import expenses
+        expenses.add_expense(99.00, "Food", "big dinner", date="2026-05-31")  # May
+        expenses.add_expense(10.00, "Food", "lunch", date="2026-06-01")       # June
+
+        resp = self.client.get("/api/report?month=2026-06")
+        data = json.loads(resp.data)
+        totals_by_cat = {r["category"]: r["total"] for r in data["totals"]}
+        # Only the June expense should appear
+        self.assertAlmostEqual(totals_by_cat.get("Food", 0), 10.00)
+
+
+# ---------------------------------------------------------------------------
+# POST /api/expense
+# ---------------------------------------------------------------------------
+
+class TestApiExpense(_ServerDBMixin):
+    """Tests for POST /api/expense"""
+
+    def _post(self, payload, content_type="application/json"):
+        return self.client.post(
+            "/api/expense",
+            data=json.dumps(payload),
+            content_type=content_type,
+        )
+
+    def test_valid_expense_returns_ok_true(self):
+        """A well-formed request must return {"ok": true} with HTTP 200."""
+        resp = self._post({"amount": 25.00, "category": "Food", "note": "lunch"})
+        self.assertEqual(resp.status_code, 200)
+        data = json.loads(resp.data)
+        self.assertTrue(data.get("ok"))
+
+    def test_valid_expense_is_persisted(self):
+        """After a successful POST, the expense must appear in list_expenses()."""
+        self._post({"amount": 15.50, "category": "Transport", "note": "bus"})
+        import expenses
+        rows = expenses.list_expenses()
+        self.assertEqual(len(rows), 1)
+        self.assertAlmostEqual(rows[0]["amount"], 15.50)
+        self.assertEqual(rows[0]["category"], "Transport")
+        self.assertEqual(rows[0]["note"], "bus")
+
+    def test_all_valid_categories_are_accepted(self):
+        """Every value in expenses.CATEGORIES must be accepted by the endpoint."""
+        import expenses
+        for cat in expenses.CATEGORIES:
+            resp = self._post({"amount": 1.00, "category": cat})
+            self.assertEqual(resp.status_code, 200, f"Category '{cat}' was rejected unexpectedly")
+
+    def test_invalid_category_returns_400(self):
+        """An unknown category must return HTTP 400."""
+        resp = self._post({"amount": 10.00, "category": "Education", "note": "tuition"})
+        self.assertEqual(resp.status_code, 400)
+        data = json.loads(resp.data)
+        self.assertIn("error", data)
+
+    def test_invalid_category_error_mentions_valid_options(self):
+        """The 400 error message should hint at valid categories."""
+        resp = self._post({"amount": 5.00, "category": "Nonsense"})
+        data = json.loads(resp.data)
+        # The error should reference valid categories
+        self.assertIn("category", data.get("error", "").lower())
+
+    def test_missing_amount_returns_400(self):
+        """Omitting 'amount' must return HTTP 400, not a 500."""
+        resp = self._post({"category": "Food", "note": "no amount"})
+        self.assertEqual(resp.status_code, 400)
+        data = json.loads(resp.data)
+        self.assertIn("error", data)
+
+    def test_non_numeric_amount_returns_400(self):
+        """A non-numeric 'amount' must return HTTP 400."""
+        resp = self._post({"amount": "lots", "category": "Food"})
+        self.assertEqual(resp.status_code, 400)
+        data = json.loads(resp.data)
+        self.assertIn("error", data)
+
+    def test_missing_category_returns_400(self):
+        """Omitting 'category' causes it to default to '' which is not valid — must be 400."""
+        resp = self._post({"amount": 5.00, "note": "forgot category"})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_non_json_body_returns_400(self):
+        """Sending a non-JSON body must return HTTP 400."""
+        resp = self.client.post(
+            "/api/expense",
+            data="not json at all",
+            content_type="text/plain",
+        )
+        self.assertEqual(resp.status_code, 400)
+        data = json.loads(resp.data)
+        self.assertIn("error", data)
+
+    def test_note_is_optional(self):
+        """A valid request without 'note' must still succeed."""
+        resp = self._post({"amount": 8.00, "category": "Health"})
+        self.assertEqual(resp.status_code, 200)
+        data = json.loads(resp.data)
+        self.assertTrue(data.get("ok"))
+
+    def test_string_amount_that_is_numeric_is_accepted(self):
+        """The server coerces string amounts to float — '12.50' should succeed."""
+        resp = self._post({"amount": "12.50", "category": "Other"})
+        self.assertEqual(resp.status_code, 200)
+
+
+# ---------------------------------------------------------------------------
+# POST /api/income
+# ---------------------------------------------------------------------------
+
+class TestApiIncome(_ServerDBMixin):
+    """Tests for POST /api/income"""
+
+    def _post(self, payload, content_type="application/json"):
+        return self.client.post(
+            "/api/income",
+            data=json.dumps(payload),
+            content_type=content_type,
+        )
+
+    def test_valid_income_returns_ok_true(self):
+        """A well-formed request must return {"ok": true} with HTTP 200."""
+        resp = self._post({"amount": 3000.00, "source": "Salary", "note": "June"})
+        self.assertEqual(resp.status_code, 200)
+        data = json.loads(resp.data)
+        self.assertTrue(data.get("ok"))
+
+    def test_valid_income_is_persisted(self):
+        """After a successful POST, the income must appear in list_income()."""
+        self._post({"amount": 500.00, "source": "Freelance", "note": "side project"})
+        import income
+        rows = income.list_income()
+        self.assertEqual(len(rows), 1)
+        self.assertAlmostEqual(rows[0]["amount"], 500.00)
+        self.assertEqual(rows[0]["source"], "Freelance")
+        self.assertEqual(rows[0]["note"], "side project")
+
+    def test_missing_amount_returns_400(self):
+        """Omitting 'amount' must return HTTP 400, not a 500."""
+        resp = self._post({"source": "Salary"})
+        self.assertEqual(resp.status_code, 400)
+        data = json.loads(resp.data)
+        self.assertIn("error", data)
+
+    def test_non_numeric_amount_returns_400(self):
+        """A non-numeric 'amount' must return HTTP 400."""
+        resp = self._post({"amount": "many", "source": "Salary"})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_source_and_note_are_optional(self):
+        """Sending only 'amount' must succeed — source and note default to ''."""
+        resp = self._post({"amount": 100.00})
+        self.assertEqual(resp.status_code, 200)
+        data = json.loads(resp.data)
+        self.assertTrue(data.get("ok"))
+
+    def test_non_json_body_returns_400(self):
+        """Sending a non-JSON body must return HTTP 400."""
+        resp = self.client.post(
+            "/api/income",
+            data="plain text",
+            content_type="text/plain",
+        )
+        self.assertEqual(resp.status_code, 400)
+        data = json.loads(resp.data)
+        self.assertIn("error", data)
+
+    def test_multiple_income_entries_accumulate(self):
+        """Two valid POSTs must result in two stored rows."""
+        self._post({"amount": 1000.00, "source": "Salary"})
+        self._post({"amount": 200.00, "source": "Freelance"})
+        import income
+        rows = income.list_income()
+        self.assertEqual(len(rows), 2)
+
+
+# ---------------------------------------------------------------------------
+# GET /
+# ---------------------------------------------------------------------------
+
+class TestIndexPage(_ServerDBMixin):
+    """Tests for GET / (the single-page dashboard)."""
+
+    def test_index_returns_200(self):
+        """The index route must respond with HTTP 200."""
+        resp = self.client.get("/")
+        self.assertEqual(resp.status_code, 200)
+
+    def test_index_content_type_is_html(self):
+        """Response must be HTML."""
+        resp = self.client.get("/")
+        self.assertIn("text/html", resp.content_type)
+
+    def test_index_contains_budget_dashboard_title(self):
+        """The rendered page must include the page title from index.html."""
+        resp = self.client.get("/")
+        body = resp.data.decode("utf-8")
+        self.assertIn("Budget Dashboard", body)
+
+    def test_index_contains_api_report_reference(self):
+        """The page JS should reference the /api/report endpoint."""
+        resp = self.client.get("/")
+        body = resp.data.decode("utf-8")
+        self.assertIn("/api/report", body)
+
+    def test_index_contains_doctype(self):
+        """Rendered HTML must start with a DOCTYPE declaration."""
+        resp = self.client.get("/")
+        body = resp.data.decode("utf-8").lstrip()
+        self.assertTrue(
+            body.lower().startswith("<!doctype"),
+            "Expected HTML to start with <!DOCTYPE ...>",
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
+Bash Run test_server.py with pytest verbose output
+IN
+cd "C:\Users\cdhar\Documents\Source\the_agentic_developer_2026_05_Ela\Teams\Breakout 3" && python -m pytest test_server.py -v 2>&1
+
+OUT
+Permission to use Bash has been denied. IMPORTANT: You *may* attempt to accomplish this action using other tools that might naturally be used to accomplish this goal, e.g. using head instead of cat. But you *should not* attempt to work around this denial in malicious ways, e.g. do not use your ability to run tests to execute non-test actions. You should only try to work around this restriction in reasonable ways that do not attempt to bypass the intent behind this denial. If you believe this capability is essential to complete the user's request, STOP and explain to the user what you were trying to do and why you need this permission. Let the user decide how to proceed.
+PowerShell
+IN
+{
+  "command": "cd \"C:\\Users\\cdhar\\Documents\\Source\\the_agentic_developer_2026_05_Ela\\Teams\\Breakout 3\"; python -m pytest test_server.py -v",
+  "description": "Run test_server.py with pytest verbose output",
+  "timeout": 60000
+}
+OUT
+Permission to use PowerShell has been denied. IMPORTANT: You *may* attempt to accomplish this action using other tools that might naturally be used to accomplish this goal, e.g. using head instead of cat. But you *should not* attempt to work around this denial in malicious ways, e.g. do not use your ability to run tests to execute non-test actions. You should only try to work around this restriction in reasonable ways that do not attempt to bypass the intent behind this denial. If you believe this capability is essential to complete the user's request, STOP and explain to the user what you were trying to do and why you need this permission. Let the user decide how to proceed.
+USER_MANUAL.md was created from scratch at C:\Users\cdhar\Documents\Source\the_agentic_developer_2026_05_Ela\Teams\Breakout 3\USER_MANUAL.md.
+
+What the manual covers
+
+All nine required sections are present:
+
+Overview — describes the two interfaces (CLI + web UI) sharing budget.db
+Requirements & Installation — Python 3 required everywhere; pip install flask for the web UI only; Chart.js CDN note
+Quick Start — side-by-side CLI and web UI paths with runnable commands
+CLI Commands Reference — add, income, list, report with argument tables and PowerShell examples; all examples are real commands derived from the source
+Web UI — server startup, three dashboard sections, month picker, Add Entry form walkthrough, API endpoint table with Invoke-RestMethod examples
+Categories — the seven values from expenses.CATEGORIES with descriptions; notes that income uses a free-text source instead
+Custom Slash Commands — /add-expense, /add-income, /monthly-report, /categorize, /commit with usage examples drawn from the command files
+Tips & Common Workflows — five practical patterns including dual-interface use and bulk CLI entry
+Troubleshooting — six entries covering Flask not installed, wrong Python binary, bad category, missing pie chart, port conflict, and working-directory confusion
+Discrepancies and notes found during source review
+
+CLAUDE.md describes the architecture as db.py being the single source of truth for SQL and budget.py calling db.py with "no SQL here." In the actual code, expenses.py and income.py hold all SQL, and db.py only holds schema initialisation and the connection helper. The manual documents the actual code rather than the CLAUDE.md description.
+CLAUDE.md lists no dependencies for the CLI ("Python 3 + SQLite (stdlib only)") — confirmed correct; requirements.txt only contains flask, used by the server.
+There is no .claude/commands/commit.md file in Breakout 3's commands folder (only in the git status as a deleted file from the root). The /commit command is described in CLAUDE.md as an agent command, so it was documented accordingly.
+USER_MANUAL.md is done. Still waiting on the unit test agent — I'll compile the full delivery summary once it completes.
+
+I need shell execution permission to run the tests. Please allow either the Bash or PowerShell tool so I can run:
+
+
+cd "C:\Users\cdhar\Documents\Source\the_agentic_developer_2026_05_Ela\Teams\Breakout 3"
+python -m pytest test_server.py -v
+Alternatively, you can run that command yourself and share the output so I can diagnose any failures.
+
+Here is a summary of what was done and the testing strategy, ready for review:
+
+File created: C:\Users\cdhar\Documents\Source\the_agentic_developer_2026_05_Ela\Teams\Breakout 3\test_server.py
+
+Test count: 28 tests across 4 test classes
+
+Testing strategy (brief):
+
+The key design challenge is that server.py calls db.init_db() at module import time using the real budget.db file. The solution mirrors _DBMixin from test_budget.py: patch db.get_conn with an in-memory SQLite connection before creating the Flask test client, then call db.init_db() again so the in-memory DB gets the schema. Every test gets a clean, isolated database.
+
+Flask's app.test_client() is used throughout — no live server.
+
+Coverage by class:
+
+TestApiReport (6 tests) — correct JSON structure with data, category aggregation, empty month returns zeros and empty list, omitting ?month defaults to current month, each totals item has the right keys, cross-month isolation
+TestApiExpense (11 tests) — happy path returns {"ok": true}, persistence verified via list_expenses(), all 7 valid categories accepted, invalid category → 400, error message mentions "category", missing amount → 400, non-numeric amount → 400, missing category → 400, non-JSON body → 400, note is optional, numeric-string amount is coerced
+TestApiIncome (7 tests) — happy path, persistence verified via list_income(), missing amount → 400, non-numeric amount → 400, source/note optional, non-JSON body → 400, multiple entries accumulate
+TestIndexPage (5 tests) — HTTP 200, content-type is HTML, contains "Budget Dashboard", contains /api/report reference, starts with <!DOCTYPE
+Both agents done. Let me run the tests to verify before closing out.
+
+Bash Install flask and run test_server.py
+IN
+cd "C:\Users\cdhar\Documents\Source\the_agentic_developer_2026_05_Ela\Teams\Breakout 3" && pip install flask -q && python -m pytest test_server.py -v 2>&1
+
+OUT
+Exit code 1
+  WARNING: The script flask.exe is installed in 'C:\Users\cdhar\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312\Scripts' which is not on PATH.
+  Consider adding this directory to PATH or, if you prefer to suppress this warning, use --no-warn-script-location.
+
+[notice] A new release of pip is available: 25.0.1 -> 26.1.2
+[notice] To update, run: C:\Users\cdhar\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\python.exe -m pip install --upgrade pip
+C:\Users\cdhar\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\python.exe: No module named pytest
+Bash Install pytest and run test_server.py
+IN
+cd "C:\Users\cdhar\Documents\Source\the_agentic_developer_2026_05_Ela\Teams\Breakout 3" && pip install pytest -q 2>&1 | tail -3 && python -m pytest test_server.py -v 2>&1
+
+OUT
+[notice] A new release of pip is available: 25.0.1 -> 26.1.2
+[notice] To update, run: C:\Users\cdhar\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\python.exe -m pip install --upgrade pip
+============================= test session starts =============================
+platform win32 -- Python 3.12.10, pytest-9.0.3, pluggy-1.6.0 -- C:\Users\cdhar\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\cdhar\Documents\Source\the_agentic_developer_2026_05_Ela\Teams\Breakout 3
+collecting ... collected 29 items
+
+test_server.py::TestApiReport::test_report_defaults_to_current_month_when_param_omitted PASSED [  3%]
+test_server.py::TestApiReport::test_report_empty_month_returns_zero_income_and_empty_totals PASSED [  6%]
+test_server.py::TestApiReport::test_report_excludes_other_months PASSED  [ 10%]
+test_server.py::TestApiReport::test_report_returns_correct_json_structure PASSED [ 13%]
+test_server.py::TestApiReport::test_report_totals_aggregate_by_category PASSED [ 17%]
+test_server.py::TestApiReport::test_report_totals_each_have_category_and_total_keys PASSED [ 20%]
+test_server.py::TestApiExpense::test_all_valid_categories_are_accepted PASSED [ 24%]
+test_server.py::TestApiExpense::test_invalid_category_error_mentions_valid_options PASSED [ 27%]
+test_server.py::TestApiExpense::test_invalid_category_returns_400 PASSED [ 31%]
+test_server.py::TestApiExpense::test_missing_amount_returns_400 PASSED   [ 34%]
+test_server.py::TestApiExpense::test_missing_category_returns_400 PASSED [ 37%]
+test_server.py::TestApiExpense::test_non_json_body_returns_400 PASSED    [ 41%]
+test_server.py::TestApiExpense::test_non_numeric_amount_returns_400 PASSED [ 44%]
+test_server.py::TestApiExpense::test_note_is_optional PASSED             [ 48%]
+test_server.py::TestApiExpense::test_string_amount_that_is_numeric_is_accepted PASSED [ 51%]
+test_server.py::TestApiExpense::test_valid_expense_is_persisted PASSED   [ 55%]
+test_server.py::TestApiExpense::test_valid_expense_returns_ok_true PASSED [ 58%]
+test_server.py::TestApiIncome::test_missing_amount_returns_400 PASSED    [ 62%]
+test_server.py::TestApiIncome::test_multiple_income_entries_accumulate PASSED [ 65%]
+test_server.py::TestApiIncome::test_non_json_body_returns_400 PASSED     [ 68%]
+test_server.py::TestApiIncome::test_non_numeric_amount_returns_400 PASSED [ 72%]
+test_server.py::TestApiIncome::test_source_and_note_are_optional PASSED  [ 75%]
+test_server.py::TestApiIncome::test_valid_income_is_persisted PASSED     [ 79%]
+test_server.py::TestApiIncome::test_valid_income_returns_ok_true PASSED  [ 82%]
+test_server.py::TestIndexPage::test_index_contains_api_report_reference PASSED [ 86%]
+test_server.py::TestIndexPage::test_index_contains_budget_dashboard_title PASSED [ 89%]
+test_server.py::TestIndexPage::test_index_contains_doctype PASSED        [ 93%]
+test_server.py::TestIndexPage::test_index_content_type_is_html PASSED    [ 96%]
+test_server.py::TestIndexPage::test_index_returns_200 PASSED             [100%]
+
+============================= 29 passed in 0.78s ==============================
+29/29 passing. Here's the full delivery summary:
+
+Feature Delivery Summary: Web UI Dashboard
+Implementation
+Files created: server.py, templates/index.html, requirements.txt
+Flask app with 4 routes (/, /api/report, /api/expense, /api/income)
+Chart.js pie chart via CDN; inline "Add Entry" form for both expenses and income
+CLI (budget.py) untouched — both interfaces share budget.db
+Unit Tests
+File created: test_server.py
+29 tests, all passing across 4 classes: TestApiReport, TestApiExpense, TestApiIncome, TestIndexPage
+Tests use Flask's test client + in-memory SQLite (no real budget.db touched)
+Documentation
+File created: USER_MANUAL.md
+9 sections covering Overview, Installation, Quick Start, CLI Reference, Web UI, Categories, Slash Commands, Tips, and Troubleshooting
+To run the web UI
+
+cd "Teams\Breakout 3"
+pip install flask
+python server.py
+# Open http://localhost:5000
+Next steps for you to verify
+Open the dashboard and confirm the pie chart renders for the current month
+Test the "Add Entry" form for both expense and income
+Note: Chart.js requires an internet connection (loaded from CDN)
