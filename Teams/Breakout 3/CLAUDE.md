@@ -24,9 +24,9 @@ This is the **Breakout 3 team workspace** for *The Agentic Developer* workshop �
 - Platform: Windows (PowerShell). Use PowerShell syntax for shell commands.
 - Git repo root is the workshop root; this folder is one team's workspace.
 
-## Custom slash commands
+**Custom agent commands**
 
-`/commit [title]` — defined at the repo root in `Teams/Heimeshoff/.claude/commands/commit.md`. Stages relevant files, writes a conventional commit message (or uses the provided title as the summary line), commits, and shows the result. Does **not** push.
+`/commit [title]` — stage relevant changes, run the `ensure-tests` skill first, write a concise commit summary, commit the changes, and show the resulting commit. Does **not** push.
 
 ## Project state
 
@@ -51,6 +51,7 @@ python budget.py report --month 2026-06
 - `budget.db` — created on first run, gitignored.
 
 **Custom slash commands** (in `.claude/commands/`)
+- `/commit [title]` — stage relevant changes, run the `ensure-tests` skill first, write a concise commit summary, commit the changes, and show the resulting commit
 - `/add-expense <amount> <category> [note]` — parse args and record an expense
 - `/monthly-report [YYYY-MM]` — run the report and add a one-line observation
 - `/categorize <amount> <description>` — Claude picks a category, confirms, then records
